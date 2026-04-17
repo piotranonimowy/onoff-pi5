@@ -44,12 +44,11 @@ function detectGpioChip() {
     if (!fs.existsSync(path)) continue;
     try {
       const chip = new gpiod.Chip(i);
-      const numLines = chip.getNumberOfLines();
+      const numLines = chip.numberOfLines;
       if (numLines > bestLines) {
         bestLines = numLines;
         bestChip = i;
       }
-      chip.close();
     } catch (_) {
       // skip chips we can't open
     }
@@ -125,26 +124,31 @@ class Gpio extends EventEmitter {
       this._chip = new gpiod.Chip(CHIP_INDEX);
       this._line = this._chip.getLine(this._gpio);
 
-      const activeLow = this._options.activeLow ? 1 : 0;
+      const activeLow = !!this._options.activeLow;
+      const flags = activeLow ? gpiod.Line.RequestFlags.ACTIVE_LOW : 0;
 
       if (this._direction === DIRECTION_OUT) {
         const initialValue = (direction === 'high') ? 1 : 0;
-        this._line.requestOutputMode(
-          'onoff',
-          activeLow,
-          initialValue
-        );
+        if (flags) {
+          this._line.requestOutputModeFlags('onoff', flags, initialValue);
+        } else {
+          this._line.requestOutputMode('onoff', initialValue);
+        }
       } else {
-        // Input — request with appropriate event flags
-        let flags = gpiod.LINE_REQUEST_FLAG_NONE || 0;
-        if (activeLow) flags |= (gpiod.LINE_REQUEST_FLAG_ACTIVE_LOW || 2);
-
-        const eventType = this._edgeToEventType(this._edge);
-        if (eventType !== null) {
-          this._line.requestBothEdgesEvents('onoff', flags);
+        const isEvent = this._edge !== EDGE_NONE;
+        if (isEvent) {
+          if (flags) {
+            this._line.requestBothEdgesEventFlags('onoff', flags);
+          } else {
+            this._line.requestBothEdgesEvents('onoff');
+          }
           this._startWatch();
         } else {
-          this._line.requestInputMode('onoff', flags);
+          if (flags) {
+            this._line.requestInputModeFlags('onoff', flags);
+          } else {
+            this._line.requestInputMode('onoff');
+          }
         }
         this._lastValue = this._line.getValue();
       }
@@ -152,16 +156,6 @@ class Gpio extends EventEmitter {
       throw new Error(
         `Failed to export GPIO${this._gpio} on gpiochip${CHIP_INDEX}: ${err.message}`
       );
-    }
-  }
-
-  _edgeToEventType(edge) {
-    if (!gpiod) return null;
-    switch (edge) {
-      case EDGE_RISING:  return gpiod.LINE_EVENT_RISING_EDGE  || 1;
-      case EDGE_FALLING: return gpiod.LINE_EVENT_FALLING_EDGE || 2;
-      case EDGE_BOTH:    return gpiod.LINE_EVENT_BOTH_EDGES   || 3;
-      default:           return null;
     }
   }
 
@@ -356,15 +350,19 @@ class Gpio extends EventEmitter {
    * re-requesting the line.
    */
   setDirection(direction) {
-    const activeLow = this._options.activeLow ? 1 : 0;
+    const flags = this._options.activeLow ? gpiod.Line.RequestFlags.ACTIVE_LOW : 0;
+
+    this._line.release();
 
     if (direction === 'in') {
       this._direction = DIRECTION_IN;
-      this._line.requestInputMode('onoff', activeLow);
+      if (flags) this._line.requestInputModeFlags('onoff', flags);
+      else       this._line.requestInputMode('onoff');
     } else {
       this._direction = DIRECTION_OUT;
-      const initial   = (direction === 'high') ? 1 : 0;
-      this._line.requestOutputMode('onoff', activeLow, initial);
+      const initial = (direction === 'high') ? 1 : 0;
+      if (flags) this._line.requestOutputModeFlags('onoff', flags, initial);
+      else       this._line.requestOutputMode('onoff', initial);
     }
   }
 
@@ -412,10 +410,7 @@ class Gpio extends EventEmitter {
       try { this._line.release(); } catch (_) {}
       this._line = null;
     }
-    if (this._chip) {
-      try { this._chip.close(); } catch (_) {}
-      this._chip = null;
-    }
+    this._chip = null;
   }
 
   // -------------------------------------------------------------------------
@@ -428,8 +423,7 @@ class Gpio extends EventEmitter {
   static get accessible() {
     if (!gpiod || CHIP_INDEX === null) return false;
     try {
-      const chip = new gpiod.Chip(CHIP_INDEX);
-      chip.close();
+      new gpiod.Chip(CHIP_INDEX);
       return true;
     } catch (_) {
       return false;
