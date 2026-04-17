@@ -1,6 +1,6 @@
 {
   "name": "onoff-pi5",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "GPIO access and interrupt detection with Node.js — Pi 5 compatible (character device API)",
   "main": "onoff.js",
   "types": "onoff.d.ts",
@@ -12,7 +12,7 @@
     "node": ">=14.0.0"
   },
   "dependencies": {
-    "node-libgpiod": "^1.2.0",
+    "node-libgpiod": "^0.6.0",
     "lodash.debounce": "^4.0.8"
   },
   "license": "MIT"
