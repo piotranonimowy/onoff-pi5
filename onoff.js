@@ -2,6 +2,7 @@
 
 /**
  * onoff - Pi 5 compatible rewrite
+ * for testing
  *
  * Original onoff uses the deprecated Linux sysfs GPIO interface
  * (/sys/class/gpio) which is NOT available on Raspberry Pi 5 (RP1 chip).
